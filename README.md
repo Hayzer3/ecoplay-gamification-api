@@ -5,19 +5,19 @@ API ASP.NET Core Minimal API para XP, progresso, missões, quiz e ranking. O app
 ## Requisitos
 
 - .NET 10 SDK
-- SQL Server local para desenvolvimento ou Azure SQL
+- Oracle FIAP, com acesso ao host `oracle.fiap.com.br:1521` e SID `ORCL`
 - Chave pública RSA em PEM emitida pelo time Java
 
 ## Configuração local
 
-Defina a connection string sem versionar credenciais:
+Defina a connection string sem versionar credenciais. Para o Oracle da FIAP:
 
 ```powershell
-$env:ConnectionStrings__Gamification = "Server=...;Database=...;User Id=...;Password=...;Encrypt=True;TrustServerCertificate=False"
+$env:ConnectionStrings__Gamification = "User Id=<usuario>;Password=<senha>;Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=oracle.fiap.com.br)(PORT=1521))(CONNECT_DATA=(SID=ORCL)))"
 $env:Jwt__PublicKeyPem = Get-Content .\java-public-key.pem -Raw
 $env:Jwt__Issuer = "ecoplay-java"
 $env:Jwt__Audience = "ecoplay-services"
-$env:JavaApi__HealthUrl = "https://localhost:8080/actuator/health"
+$env:JavaApi__HealthUrl = "http://localhost:8080/actuator/health"
 ```
 
 O valor `Jwt:PublicKeyPem` de exemplo é vazio; nesse caso, a API sobe com uma chave RSA efêmera e tokens reais do Java não serão aceitos. Configure a chave pública antes de integrar. A API nunca emite token e não recebe a chave privada.
@@ -30,7 +30,7 @@ dotnet tool install --global dotnet-ef --version 10.0.7
 dotnet ef database update --project src/EcoPlay.Gamification.Api
 ```
 
-O EF Core usa o schema `gamificacao`. A primeira execução aplica as migrations e completa o catálogo com seis missões e 20 perguntas de exemplo; revise as perguntas com a equipe antes da entrega. A migration existente é `InitialCreate`, então não execute `migrations add InitialCreate` novamente.
+O EF Core cria as tabelas no schema do usuário Oracle configurado na connection string; não é necessário criar um schema separado. A primeira execução aplica as migrations Oracle e completa o catálogo com seis missões e 20 perguntas de exemplo. Migrations são específicas do banco; use apenas as migrations Oracle desta versão. O comando de atualização precisa da connection string Oracle configurada no ambiente.
 
 ## Executar
 
@@ -42,19 +42,19 @@ Em `Development`, Swagger fica em `/swagger`. O endpoint `/health` verifica cone
 
 ## Deploy no Render
 
-Crie um Web Service ligado a este repositório, selecione **Docker** e use a raiz do repositório como contexto de build. O `Dockerfile` publica a API em modo Release e escuta na porta informada pelo Render. Configure `/health` como Health Check Path.
+Crie um Web Service ligado a este repositório, selecione **Docker** e use a raiz do repositório como contexto de build. O `Dockerfile` publica a API em modo Release e escuta na porta informada pelo Render. Configure `/health` como Health Check Path. O serviço Render precisa conseguir abrir conexão TCP na porta 1521 para `oracle.fiap.com.br`; confirme esse acesso com o administrador do serviço Oracle da FIAP antes do deploy.
 
 Cadastre as configurações no painel do serviço em **Environment**, sem adicioná-las aos arquivos do repositório:
 
 | Variável | Valor |
 |---|---|
-| `ConnectionStrings__Gamification` | Connection string do SQL Server/Azure SQL |
+| `ConnectionStrings__Gamification` | Connection string Oracle, no formato usado na configuração local |
 | `Jwt__PublicKeyPem` | Conteúdo PEM da chave pública RSA usada pelo Java |
 | `Jwt__Issuer` | `ecoplay-java` |
 | `Jwt__Audience` | `ecoplay-services` |
 | `JavaApi__HealthUrl` | URL pública de `/actuator/health` do Java; opcional |
 
-O issuer e a audience precisam corresponder aos tokens emitidos pelo Java. A API reconhece o claim `papel` para autorização e usa `userId`, com fallback para `sub`, como identificador do usuário. Nunca configure a chave privada RSA no Render para este serviço. Restrinja o acesso do Azure SQL à origem de rede do serviço Render e mantenha a connection string somente nas variáveis de ambiente.
+O issuer e a audience precisam corresponder aos tokens emitidos pelo Java. A API reconhece o claim `papel` para autorização e usa `userId`, com fallback para `sub`, como identificador do usuário. Nunca configure a chave privada RSA no Render para este serviço. Mantenha a connection string somente nas variáveis de ambiente.
 
 ## Endpoints
 
@@ -67,7 +67,7 @@ O issuer e a audience precisam corresponder aos tokens emitidos pelo Java. A API
 | GET | `/api/ranking?bairro=Centro` | `CIDADAO` | Ranking por XP, com filtro opcional |
 | POST | `/api/xp/creditos` | `SISTEMA` | Credita entrega ou identificação com `Idempotency-Key` |
 | POST | `/api/missoes/reforco` | `SISTEMA` | Atribui missão após recusa, com `Idempotency-Key` |
-| GET | `/health` | Público | Saúde da API, SQL e serviço Java configurado |
+| GET | `/health` | Público | Saúde da API, Oracle e serviço Java configurado |
 
 Claims esperadas no JWT: `sub` com o ID do usuário, `papel` com `CIDADAO` ou `SISTEMA`, mais `iss` e `aud` conforme configuração. Assinatura aceita apenas RS256; expiração é obrigatória.
 
@@ -92,7 +92,7 @@ O endpoint de quiz limita a 10 respostas por minuto por `sub` e concede no máxi
 dotnet test
 ```
 
-Os testes xUnit cobrem regras de níveis e XP e usam `WebApplicationFactory` com SQLite em memória para verificar autenticação e replay idempotente sem duplicar lançamento. Para validar carga concorrente em Azure SQL, rode também uma verificação de integração em ambiente de desenvolvimento com a mesma connection string do backend.
+Os testes xUnit cobrem regras de níveis e XP e usam `WebApplicationFactory` com SQLite em memória para verificar autenticação e replay idempotente sem duplicar lançamento. Para validar concorrência no Oracle FIAP, rode também uma verificação de integração em ambiente de desenvolvimento com a mesma connection string do backend.
 
 ## Contrato de integração com Java
 
@@ -100,7 +100,7 @@ Os testes xUnit cobrem regras de níveis e XP e usam `WebApplicationFactory` com
 - A API Java publica o evento após confirmação da cooperativa; o consumidor Java envia o crédito com uma chave estável como `entrega-{entregaId}`.
 - Para entrega recusada, o consumidor envia `POST /api/missoes/reforco` com a mesma chave de evento, `usuarioId`, `missaoId` e motivo.
 - O claim `bairro` do usuário é usado para alimentar seu perfil quando consulta `/api/progresso`, permitindo filtro do ranking sem duplicar cadastro do schema `core`.
-- Azure SQL e as tabelas do serviço Java compartilham a instância, mas não há chave estrangeira entre os schemas; o identificador do Java é armazenado como texto.
+- O serviço usa o schema do usuário Oracle configurado; os identificadores Java são armazenados como texto e não há dependência de chave estrangeira para o schema da aplicação Java.
 
 ## Limitações conhecidas da primeira versão
 

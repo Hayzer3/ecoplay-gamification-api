@@ -8,6 +8,6 @@ public sealed class DatabaseHealthCheck(GamificationDbContext db) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
         => await db.Database.CanConnectAsync(cancellationToken)
-            ? HealthCheckResult.Healthy("Azure SQL acessível.")
-            : HealthCheckResult.Unhealthy("Azure SQL indisponível.");
+            ? HealthCheckResult.Healthy("Oracle acessível.")
+            : HealthCheckResult.Unhealthy("Oracle indisponível.");
 }

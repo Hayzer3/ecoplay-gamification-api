@@ -41,48 +41,20 @@ public static class CatalogSeeder
 
     public static async Task SeedAsync(GamificationDbContext db, CancellationToken ct = default)
     {
-        await db.Database.OpenConnectionAsync(ct);
-        try
+        var questionIds = await db.PerguntasQuiz.Select(x => x.Id).ToListAsync(ct);
+        var questionsToAdd = Questions.Where(x => !questionIds.Contains(x.Id)).ToArray();
+        if (questionsToAdd.Length > 0)
         {
-            var questionIds = await db.PerguntasQuiz.Select(x => x.Id).ToListAsync(ct);
-            var questionsToAdd = Questions.Where(x => !questionIds.Contains(x.Id)).ToArray();
-            if (questionsToAdd.Length > 0)
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    "SET IDENTITY_INSERT [gamificacao].[pergunta_quiz] ON", ct);
-                try
-                {
-                    db.PerguntasQuiz.AddRange(questionsToAdd);
-                    await db.SaveChangesAsync(ct);
-                }
-                finally
-                {
-                    await db.Database.ExecuteSqlRawAsync(
-                        "SET IDENTITY_INSERT [gamificacao].[pergunta_quiz] OFF", ct);
-                }
-            }
-
-            var missionIds = await db.Missoes.Select(x => x.Id).ToListAsync(ct);
-            var missionsToAdd = Missions.Where(x => !missionIds.Contains(x.Id)).ToArray();
-            if (missionsToAdd.Length > 0)
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    "SET IDENTITY_INSERT [gamificacao].[missao] ON", ct);
-                try
-                {
-                    db.Missoes.AddRange(missionsToAdd);
-                    await db.SaveChangesAsync(ct);
-                }
-                finally
-                {
-                    await db.Database.ExecuteSqlRawAsync(
-                        "SET IDENTITY_INSERT [gamificacao].[missao] OFF", ct);
-                }
-            }
+            db.PerguntasQuiz.AddRange(questionsToAdd);
+            await db.SaveChangesAsync(ct);
         }
-        finally
+
+        var missionIds = await db.Missoes.Select(x => x.Id).ToListAsync(ct);
+        var missionsToAdd = Missions.Where(x => !missionIds.Contains(x.Id)).ToArray();
+        if (missionsToAdd.Length > 0)
         {
-            await db.Database.CloseConnectionAsync();
+            db.Missoes.AddRange(missionsToAdd);
+            await db.SaveChangesAsync(ct);
         }
     }
 }

@@ -16,9 +16,18 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("Gamification")
-    ?? "Server=(localdb)\\MSSQLLocalDB;Database=EcoPlay;Trusted_Connection=True;TrustServerCertificate=True";
+    ?? string.Empty;
 
-builder.Services.AddDbContext<GamificationDbContext>(options => options.UseSqlServer(connectionString));
+if (string.IsNullOrWhiteSpace(connectionString) && !builder.Environment.IsEnvironment("Testing"))
+    throw new InvalidOperationException("Configure ConnectionStrings:Gamification with the Oracle connection string.");
+
+builder.Services.AddDbContext<GamificationDbContext>(options =>
+{
+    if (string.IsNullOrWhiteSpace(connectionString))
+        options.UseOracle(oracle => oracle.UseOracleSQLCompatibility(OracleSQLCompatibility.DatabaseVersion19));
+    else
+        options.UseOracle(connectionString, oracle => oracle.UseOracleSQLCompatibility(OracleSQLCompatibility.DatabaseVersion19));
+});
 builder.Services.AddScoped<IdempotencyService>();
 builder.Services.AddScoped<GamificationService>();
 builder.Services.AddHttpClient("java-api", client => client.Timeout = TimeSpan.FromSeconds(3));
@@ -91,7 +100,7 @@ app.MapGet("/health", async (HealthCheckService checks, HttpContext context) =>
     var report = await checks.CheckHealthAsync(_ => true, context.RequestAborted);
     context.Response.StatusCode = report.Status == Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy ? 200 : 503;
     return Results.Json(new { status = report.Status.ToString().ToLowerInvariant(), checks = report.Entries.ToDictionary(x => x.Key, x => new { status = x.Value.Status.ToString().ToLowerInvariant(), description = x.Value.Description }) });
-}).AllowAnonymous().WithName("Health").WithSummary("Verifica API, Azure SQL e API Java configurada.");
+}).AllowAnonymous().WithName("Health").WithSummary("Verifica API, Oracle e API Java configurada.");
 
 var api = app.MapGroup("/api");
 api.MapGet("/progresso", async (ClaimsPrincipal user, GamificationService service, CancellationToken ct) =>

@@ -18,7 +18,6 @@ public sealed class GamificationDbContext(DbContextOptions<GamificationDbContext
 
     protected override void OnModelCreating(ModelBuilder model)
     {
-        model.HasDefaultSchema("gamificacao");
         model.Entity<LancamentoXp>(e =>
         {
             e.ToTable("lancamento_xp"); e.HasKey(x => x.Id);
@@ -34,14 +33,14 @@ public sealed class GamificationDbContext(DbContextOptions<GamificationDbContext
             e.Property(x => x.Chave).HasMaxLength(150).IsRequired();
             e.Property(x => x.Operacao).HasMaxLength(60).IsRequired();
             e.Property(x => x.HashRequisicao).HasMaxLength(64).IsRequired();
-            e.Property(x => x.RespostaJson).HasColumnType("nvarchar(max)").IsRequired();
+            e.Property(x => x.RespostaJson).HasColumnType("CLOB").IsRequired();
             e.HasIndex(x => x.Chave).IsUnique();
         });
         model.Entity<PerguntaQuiz>(e =>
         {
-            e.ToTable("pergunta_quiz"); e.HasKey(x => x.Id);
+            e.ToTable("pergunta_quiz"); e.HasKey(x => x.Id); e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Enunciado).HasMaxLength(500).IsRequired();
-            var alternatives = e.Property(x => x.Alternativas).HasConversion(v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null), v => JsonSerializer.Deserialize<string[]>(v, (JsonSerializerOptions?)null) ?? Array.Empty<string>()).HasColumnType("nvarchar(max)");
+            var alternatives = e.Property(x => x.Alternativas).HasConversion(v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null), v => JsonSerializer.Deserialize<string[]>(v, (JsonSerializerOptions?)null) ?? Array.Empty<string>()).HasColumnType("CLOB");
             alternatives.Metadata.SetValueComparer(new ValueComparer<string[]>(
                 (left, right) => left != null && right != null && left.SequenceEqual(right),
                 value => value.Aggregate(0, (hash, item) => HashCode.Combine(hash, item.GetHashCode())),
@@ -51,7 +50,7 @@ public sealed class GamificationDbContext(DbContextOptions<GamificationDbContext
         });
         model.Entity<Missao>(e =>
         {
-            e.ToTable("missao"); e.HasKey(x => x.Id);
+            e.ToTable("missao"); e.HasKey(x => x.Id); e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.Titulo).HasMaxLength(120).IsRequired(); e.Property(x => x.Descricao).HasMaxLength(500).IsRequired(); e.Property(x => x.Tipo).HasMaxLength(30).IsRequired();
             
         });
@@ -63,7 +62,7 @@ public sealed class GamificationDbContext(DbContextOptions<GamificationDbContext
         });
         model.Entity<Medalha>(e =>
         {
-            e.ToTable("medalha"); e.HasKey(x => x.Id); e.Property(x => x.Nome).HasMaxLength(100).IsRequired(); e.Property(x => x.Regra).HasMaxLength(300).IsRequired();
+            e.ToTable("medalha"); e.HasKey(x => x.Id); e.Property(x => x.Id).ValueGeneratedNever(); e.Property(x => x.Nome).HasMaxLength(100).IsRequired(); e.Property(x => x.Regra).HasMaxLength(300).IsRequired();
             e.HasData(
                 new Medalha { Id = 1, Nome = "Primeira Entrega", Regra = "Concluir a primeira entrega." },
                 new Medalha { Id = 2, Nome = "10 kg Entregues", Regra = "Acumular 10 kg em entregas confirmadas." },
