@@ -1,0 +1,15 @@
+.git
+**/bin
+**/obj
+.vs
+.dotnet-home
+.tools
+*.user
+*.suo
+*.pem
+*.pfx
+*.key
+.env
+.env.*
+!.env.example
+**/appsettings.*.local.json

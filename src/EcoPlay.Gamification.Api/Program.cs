@@ -138,7 +138,7 @@ api.MapPost("/missoes/reforco", async (ReforcoRequest request, HttpRequest http,
 
 app.Run();
 
-static string Subject(ClaimsPrincipal user) => user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier)
-    ?? throw new InvalidOperationException("JWT autenticado sem claim sub.");
+static string Subject(ClaimsPrincipal user) => user.FindFirstValue("userId") ?? user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier)
+    ?? throw new InvalidOperationException("JWT autenticado sem claim userId ou sub.");
 
 public partial class Program { }

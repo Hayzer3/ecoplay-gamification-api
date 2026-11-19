@@ -40,6 +40,22 @@ dotnet run --project src/EcoPlay.Gamification.Api
 
 Em `Development`, Swagger fica em `/swagger`. O endpoint `/health` verifica conectividade do banco e, quando `JavaApi:HealthUrl` estiver configurado, consulta também a API Java.
 
+## Deploy no Render
+
+Crie um Web Service ligado a este repositório, selecione **Docker** e use a raiz do repositório como contexto de build. O `Dockerfile` publica a API em modo Release e escuta na porta informada pelo Render. Configure `/health` como Health Check Path.
+
+Cadastre as configurações no painel do serviço em **Environment**, sem adicioná-las aos arquivos do repositório:
+
+| Variável | Valor |
+|---|---|
+| `ConnectionStrings__Gamification` | Connection string do SQL Server/Azure SQL |
+| `Jwt__PublicKeyPem` | Conteúdo PEM da chave pública RSA usada pelo Java |
+| `Jwt__Issuer` | `ecoplay-java` |
+| `Jwt__Audience` | `ecoplay-services` |
+| `JavaApi__HealthUrl` | URL pública de `/actuator/health` do Java; opcional |
+
+O issuer e a audience precisam corresponder aos tokens emitidos pelo Java. A API reconhece o claim `papel` para autorização e usa `userId`, com fallback para `sub`, como identificador do usuário. Nunca configure a chave privada RSA no Render para este serviço. Restrinja o acesso do Azure SQL à origem de rede do serviço Render e mantenha a connection string somente nas variáveis de ambiente.
+
 ## Endpoints
 
 | Método | Rota | Acesso | Função |
