@@ -1,0 +1,11 @@
+Compilação de 19/11/2026 19:30:07 iniciada.
+     1>Projeto "C:\Users\lucas\Desktop\global\ecoplay-ia\EcoPlay.sln" no nó 1 (VSTest destino(s)).
+     1>ValidateSolutionConfiguration:
+         Compilando a configuração de solução "Release|Any CPU".
+     1>Projeto de compilação pronto "C:\Users\lucas\Desktop\global\ecoplay-ia\EcoPlay.sln" (VSTest destino(s)) -- FALHA.
+
+FALHA da compilação.
+    0 Aviso(s)
+    0 Erro(s)
+
+Tempo Decorrido 00:00:02.48

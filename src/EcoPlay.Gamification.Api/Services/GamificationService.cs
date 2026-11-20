@@ -33,8 +33,9 @@ public sealed class GamificationService(GamificationDbContext db, IdempotencySer
                 UsuarioId = request.UsuarioId, Origem = request.Origem,
                 Referencia = request.Referencia, Quantidade = creditado, PesoKg = request.PesoKg, CriadoEm = agora
             });
+            var xpMissoes = await AvancarMissoesAsync(request.UsuarioId, request.Origem, 1, agora, ct);
             var total = await db.LancamentosXp.Where(x => x.UsuarioId == request.UsuarioId).SumAsync(x => (int?)x.Quantidade, ct) ?? 0;
-            total += creditado;
+            total += creditado + xpMissoes;
             return new CreditoXpResult(request.UsuarioId, creditado, total, RegrasGamificacao.Nivel(total));
         }, ct);
         if (request.Origem == "ENTREGA")
@@ -65,13 +66,23 @@ public sealed class GamificationService(GamificationDbContext db, IdempotencySer
         var xpHoje = await db.LancamentosXp.Where(x => x.UsuarioId == userId && x.Origem == "QUIZ" && x.CriadoEm >= inicio && x.CriadoEm < fim).SumAsync(x => (int?)x.Quantidade, ct) ?? 0;
         var correta = question.IndiceCorreto == request.IndiceAlternativa;
         var xp = correta ? Math.Min(5, Math.Max(0, 50 - xpHoje)) : 0;
-        if (xp > 0)
+        var xpMissao = correta
+            ? await AvancarMissoesAsync(userId, "QUIZ", 1, agora, ct)
+            : 0;
+        if (xp > 0 || correta)
         {
-            db.LancamentosXp.Add(new LancamentoXp { UsuarioId = userId, Origem = "QUIZ", Referencia = $"pergunta-{question.Id}-{Guid.NewGuid():N}", Quantidade = xp, CriadoEm = agora });
+            if (xp > 0)
+                db.LancamentosXp.Add(new LancamentoXp { UsuarioId = userId, Origem = "QUIZ", Referencia = $"pergunta-{question.Id}-{Guid.NewGuid():N}", Quantidade = xp, CriadoEm = agora });
             await db.SaveChangesAsync(ct);
         }
         var totalDia = xpHoje + xp;
-        return new RespostaQuizResult(correta, xp, totalDia, 50, correta ? (xp == 0 ? "Resposta correta; limite diário de XP do quiz atingido." : "Resposta correta!") : "Resposta incorreta. Revise a orientação e tente novamente.");
+        var mensagem = !correta
+            ? "Resposta incorreta. Revise a orientação e tente novamente."
+            : xp == 0
+                ? "Resposta correta; limite diário de XP do quiz atingido."
+                : "Resposta correta!";
+        if (xpMissao > 0) mensagem += $" Missão concluída: +{xpMissao} XP.";
+        return new RespostaQuizResult(correta, xp + xpMissao, totalDia, 50, mensagem);
     }
 
     public async Task<ProgressoResult> ProgressoAsync(string userId, string? bairro, CancellationToken ct)
@@ -146,6 +157,49 @@ public sealed class GamificationService(GamificationDbContext db, IdempotencySer
         var profile = await db.Perfis.SingleOrDefaultAsync(x => x.UsuarioId == userId, ct);
         if (profile is null) db.Perfis.Add(new PerfilGamificacao { UsuarioId = userId, Bairro = bairro, AtualizadoEm = now });
         else { profile.Bairro = bairro; profile.AtualizadoEm = now; }
+    }
+
+    private async Task<int> AvancarMissoesAsync(string userId, string tipo, int incremento, DateTimeOffset now, CancellationToken ct)
+    {
+        var missions = await db.Missoes.AsNoTracking()
+            .Where(x => x.Tipo == tipo)
+            .OrderBy(x => x.Id)
+            .ToListAsync(ct);
+        if (missions.Count == 0) return 0;
+
+        var missionIds = missions.Select(x => x.Id).ToArray();
+        var assignments = await db.MissoesUsuario
+            .Where(x => x.UsuarioId == userId && missionIds.Contains(x.MissaoId))
+            .ToDictionaryAsync(x => x.MissaoId, ct);
+
+        var xpAwarded = 0;
+        foreach (var mission in missions)
+        {
+            if (assignments.TryGetValue(mission.Id, out var assignment) && assignment.ConcluidaEm is not null)
+                continue;
+
+            if (assignment is null)
+            {
+                assignment = new MissaoUsuario { UsuarioId = userId, MissaoId = mission.Id, Progresso = 0 };
+                db.MissoesUsuario.Add(assignment);
+            }
+
+            assignment.Progresso = Math.Min(mission.Meta, assignment.Progresso + incremento);
+            if (assignment.Progresso < mission.Meta) continue;
+
+            assignment.ConcluidaEm = now;
+            xpAwarded += mission.Xp;
+            db.LancamentosXp.Add(new LancamentoXp
+            {
+                UsuarioId = userId,
+                Origem = "MISSAO",
+                Referencia = $"missao-{mission.Id}",
+                Quantidade = mission.Xp,
+                CriadoEm = now
+            });
+        }
+
+        return xpAwarded;
     }
 
     private async Task ConcederMedalhasEntrega(CreditoXpRequest request, DateTimeOffset now, CancellationToken ct)
